@@ -5,6 +5,70 @@
         <v-toolbar
             flat
         >
+          <v-dialog
+              v-model="dialog"
+              width="500"
+          >
+            <template v-slot:activator="{ on, attrs }">
+              <v-btn
+                  color="red lighten-2"
+                  dark
+                  v-bind="attrs"
+                  v-on="on"
+                  class="mr-2"
+              >
+                Add event
+              </v-btn>
+            </template>
+
+            <v-card>
+              <v-card-title class="headline grey lighten-2">
+                Add new event
+              </v-card-title>
+
+              <v-form v-model="valid">
+                <v-container>
+                  <v-row>
+                    <v-col
+                        cols="12"
+                    >
+                      <v-text-field
+                          v-model="newElement.name"
+                          label="Event name"
+                          required
+                      ></v-text-field>
+                      <v-textarea
+                          v-model="newElement.details"
+                          label="Details"
+                      ></v-textarea>
+                      <v-text-field
+                          type="date"
+                          v-model="newElement.start"
+                          label="Event date"
+                          required
+                      ></v-text-field>
+                      <v-text-field
+                          type="date"
+                          v-model="newElement.end"
+                          label="Event end date"
+                      ></v-text-field>
+                      <v-text-field
+                          v-model="newElement.color"
+                          type="color"
+                          label="Event color"
+                          required
+                      ></v-text-field>
+                      <v-text-field
+                          v-model="newElement.color"
+                      ></v-text-field>
+                      <v-btn text color="primary" @click="addEvent">Save</v-btn>
+                      <v-btn text color="secondary" @click="dialog = false">Cancel</v-btn>
+                    </v-col>
+                  </v-row>
+                </v-container>
+              </v-form>
+            </v-card>
+          </v-dialog>
           <v-btn
               outlined
               class="mr-4"
@@ -101,20 +165,57 @@
                 :color="selectedEvent.color"
                 dark
             >
-              <v-btn icon>
-                <v-icon>mdi-pencil</v-icon>
+              <v-btn @click="deleteEvent(selectedEvent.id)" icon>
+                <v-icon>mdi-delete</v-icon>
               </v-btn>
               <v-toolbar-title v-html="selectedEvent.name"></v-toolbar-title>
               <v-spacer></v-spacer>
-              <v-btn icon>
-                <v-icon>mdi-heart</v-icon>
-              </v-btn>
-              <v-btn icon>
-                <v-icon>mdi-dots-vertical</v-icon>
-              </v-btn>
+              <v-icon @click="editingElement = selectedEvent">mdi-pencil</v-icon>
             </v-toolbar>
             <v-card-text>
-              <span v-html="selectedEvent.details"></span>
+              <span v-if="editingElement === null || editingElement.id !== selectedEvent.id"
+                    v-html="selectedEvent.details"></span>
+              <v-form v-else v-model="valid">
+                <v-container>
+                  <v-row>
+                    <v-col
+                        cols="12"
+                    >
+                      <v-text-field
+                          v-model="editingElement.name"
+                          label="Event name"
+                          required
+                      ></v-text-field>
+                      <v-textarea
+                          v-model="editingElement.details"
+                          label="Details"
+                      ></v-textarea>
+                      <v-text-field
+                          type="date"
+                          v-model="editingElement.start"
+                          label="Event date"
+                          required
+                      ></v-text-field>
+                      <v-text-field
+                          type="date"
+                          v-model="editingElement.end"
+                          label="Event end date"
+                      ></v-text-field>
+                      <v-text-field
+                          v-model="editingElement.color"
+                          type="color"
+                          label="Event color"
+                          required
+                      ></v-text-field>
+                      <v-text-field
+                          v-model="editingElement.color"
+                      ></v-text-field>
+                      <v-btn text color="primary" @click="updateEvent">Save</v-btn>
+                      <v-btn text color="secondary" @click="editingElement = null">Cancel</v-btn>
+                    </v-col>
+                  </v-row>
+                </v-container>
+              </v-form>
             </v-card-text>
             <v-card-actions>
               <v-btn
@@ -122,7 +223,7 @@
                   color="secondary"
                   @click="selectedOpen = false"
               >
-                Cancel
+                Close
               </v-btn>
             </v-card-actions>
           </v-card>
@@ -140,23 +241,47 @@ import {EventsService} from "@/services/EventsService";
 
 @Component
 export default class Calendar extends Vue {
-  @$inject('EventsService') private readonly eventsService: EventsService
+  @$inject('EventsService') private readonly eventsService!: EventsService
+
+  private valid: boolean = false;
   private focus: string = '';
   private type: string = 'month';
+  private dialog: boolean = false;
+  private newElement: Event = {};
+  private editingElement: Event | null = null;
+  private selectedEvent: Event = {};
+  private selectedElement: Event | null = null;
+  private selectedOpen: boolean = false;
+  private events: Array<Event> = [];
   private typeToLabel: object = {
     month: 'Month',
     week: 'Week',
     day: 'Day',
     '4day': '4 Days',
   };
-  private selectedEvent: object = {};
-  private selectedElement: object = null;
-  private selectedOpen: boolean = false;
-  private events: Array<Event> = [];
 
   private viewDay({date}): void {
     this.focus = date;
     this.type = 'day';
+  }
+
+  private async deleteEvent(id: string): void {
+    await this.eventsService.delete(id);
+    await this.updateRange();
+    this.selectedOpen = null;
+  }
+
+  private async updateEvent(): void {
+    await this.eventsService.update(this.editingElement);
+    this.editingElement = null;
+    await this.updateRange();
+  }
+
+  private async addEvent(): void {
+    await this.eventsService.add(this.newElement);
+    this.newElement = {};
+    this.dialog = false;
+    await this.updateRange();
   }
 
   public getEventColor(event): string {
@@ -195,7 +320,7 @@ export default class Calendar extends Vue {
     nativeEvent.stopPropagation()
   }
 
-  async updateRange () {
+  async updateRange(): void {
     this.events = await this.eventsService.getAll();
   }
 }

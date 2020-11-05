@@ -29,4 +29,18 @@ export class EventsService {
 
         return events;
     }
+
+    public async delete(id: string): Promise<void> {
+        await this.collection.doc(id).delete();
+    }
+
+    public async update(event: Event): Promise<void> {
+        const {id, ...data} = event;
+
+        await this.collection.doc(event.id).update(data);
+    }
+
+    public async add(event: Event): Promise<void> {
+        await this.collection.add(event);
+    }
 }
